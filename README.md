@@ -1,1 +1,1 @@
-# stock-tracker
+# Stock Price Tracker (in development)
