@@ -1,5 +1,4 @@
-echo "venv/
+echo "apivenv/
 *.pyc
 __pycache__/
 stock_data.db" > .gitignore
-/apivenv
