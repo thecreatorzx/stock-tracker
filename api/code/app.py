@@ -1,4 +1,5 @@
 import requests
+import os
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime,timedelta
 from flask import Flask
@@ -9,7 +10,7 @@ app = Flask(__name__)
 CORS(app)
 
 # configure sqlalchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///stock_data.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///stock_data.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False 
 db = SQLAlchemy(app)
 
@@ -17,7 +18,7 @@ db = SQLAlchemy(app)
 api = Api(app)
 
 # Alpha Vantage API 
-API_KEY = "7IWUUFIZLJG4UHN4"
+API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "7IWUUFIZLJG4UHN4")
 EXPIRY_TIME = 5
 
 
