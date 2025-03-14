@@ -1,25 +1,31 @@
-import logo from './logo.svg';
-import './App.css';
+import { useState } from "react";
+import StockDashboard from "./components/StockDashboard";
 
-function App() {
+const App = () => {
+  const [symbol, setSymbol] = useState("AAPL");
+
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
+    <div className="min-h-screen bg-gray-900 text-white">
+      {/* header */}
+      <header className="bg-gray-800 p-4 flex justify-between items-center">
+        <h1 className="text-xl font-bold">Stock Price Tracker</h1>
+        <>
+          <input
+            type="text"
+            value={symbol}
+            onChange={(e) => {
+              setSymbol(e.target.value.toUpperCase());
+            }}
+            placeholder="Search stocks (e.g., AAPL)"
+            className="p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          />
+        </>
       </header>
+
+      {/* main */}
+      <StockDashboard symbol={symbol} />
     </div>
   );
-}
+};
 
 export default App;

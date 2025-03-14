@@ -2,7 +2,7 @@ import requests
 import os
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime,timedelta
-from flask import Flask
+from flask import Flask, jsonify, make_response
 from flask_cors import CORS
 from flask_restful import Api, Resource, abort,fields, marshal_with
 
@@ -39,7 +39,11 @@ class StockData(db.Model):
 with app.app_context():
     db.create_all()
     print("Database created or verified!!")
-    
+
+def custom_abort(status_code, message):
+    response = make_response(jsonify({"error": message, "status": status_code}), status_code)
+    abort(response)
+
 # function for fetching and cache stock data
 def fetch_and_cache_data(symbol):
     try:
