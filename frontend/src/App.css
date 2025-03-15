@@ -1,9 +1,8 @@
-.App {
-  text-align: center;
-  padding: 20px;
-}
 input {
   padding: 8px;
   margin: 10px;
   font-size: 16px;
+}
+.text-xxs {
+  font-size: .5rem;
 }

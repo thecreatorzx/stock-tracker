@@ -19,7 +19,7 @@ api = Api(app)
 
 # Alpha Vantage API 
 API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "7IWUUFIZLJG4UHN4")
-EXPIRY_TIME = 5
+EXPIRY_TIME = 30
 
 
 # Model for stock data

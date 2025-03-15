@@ -53,7 +53,7 @@ const StockChart = ({ symbol }) => {
   }, [symbol]);
 
   return (
-    <div className="mt-6">
+    <div className="mt-6 flex justify-center w-full h-72">
       {history ? (
         <>
           <Line
