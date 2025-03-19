@@ -9,59 +9,40 @@ const StockDashboard = ({ symbol }) => {
   const [priceChange, setPriceChange] = useState(null);
   const [sma, setSma] = useState(null);
   const [err, setErr] = useState(null);
+  // date time
+  const now = new Date();
 
   // called every time the symbol value change
-  // useEffect(() => {
-  //   const fetchData = async () => {
-  //     try {
-  //       // fetch stock data
-  //       const stockRes = await axios.get(
-  //         `http://localhost:5000/api/stock/${symbol}`
-  //       );
-  //       setStockData(stockRes.data);
-
-  //       // fetch price change
-  //       const priceChangeRes = await axios.get(
-  //         `http://localhost:5000/api/price-change/${symbol}`
-  //       );
-  //       setPriceChange(priceChangeRes.data);
-
-  //       // fetch sma
-  //       const smaRes = await axios.get(
-  //         `http://localhost:5000/api/sma/${symbol}`
-  //       );
-  //       setSma(smaRes.data);
-
-  //       setErr(null);
-  //     } catch (err) {
-  //       setErr("Error fetching data");
-  //       setStockData(null);
-  //       setPriceChange(null);
-  //       setSma(null);
-  //     }
-  //   };
-  //   fetchData();
-  // }, [symbol]);
-
   useEffect(() => {
-    // Simulated demo data
-    const demoStockData = {
-      symbol: symbol || "AAPL",
-      price: 150.75,
-    };
+    const fetchData = async () => {
+      try {
+        // fetch stock data
+        const stockRes = await axios.get(
+          `http://localhost:5000/api/stock/${symbol}`
+        );
+        setStockData(stockRes.data);
 
-    const demoPriceChange = {
-      price_change: 1.23,
-    };
+        // fetch price change
+        const priceChangeRes = await axios.get(
+          `http://localhost:5000/api/price-change/${symbol}`
+        );
+        setPriceChange(priceChangeRes.data);
 
-    const demoSma = {
-      sma: 148.92,
-    };
+        // fetch sma
+        const smaRes = await axios.get(
+          `http://localhost:5000/api/sma/${symbol}`
+        );
+        setSma(smaRes.data);
 
-    // Set the demo data
-    setStockData(demoStockData);
-    setPriceChange(demoPriceChange);
-    setSma(demoSma);
+        setErr(null);
+      } catch (err) {
+        setErr("Error fetching data");
+        setStockData(null);
+        setPriceChange(null);
+        setSma(null);
+      }
+    };
+    fetchData();
   }, [symbol]);
 
   return (
@@ -79,6 +60,14 @@ const StockDashboard = ({ symbol }) => {
             <div className="w-full flex flex-col lg:flex-row justify-between">
               <h2 className="text-2xl font-semibold mb-6">
                 {stockData.symbol}
+
+                {/* date time  */}
+                <span className="relative bottom-2 ml-6 text-gray-500 text-xxs">
+                  AS OF &nbsp;
+                  {` ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()} ${now.getDate()}-${
+                    now.getMonth() + 1
+                  }-${now.getFullYear()}`}
+                </span>
               </h2>
               <div className="flex flex-row">
                 <p className="text-4xl mr-4 mt-1">${stockData.price}</p>
@@ -90,7 +79,7 @@ const StockDashboard = ({ symbol }) => {
                         : "text-red-500"
                     } text-xs mt-1`}
                   >
-                    <span className="text-gray-500">At close:</span>
+                    <span className="text-gray-500">AT CLOSE - </span>
                     {priceChange.price_change.toFixed(2)}%
                   </p>
                 )}

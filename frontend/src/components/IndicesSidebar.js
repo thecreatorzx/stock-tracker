@@ -1,23 +1,68 @@
+import { useState } from "react";
+
 function IndicesSidebar() {
-  const indices = [
-    { name: "DOW", value: "40,813.57", change: "-1.30%" },
-    { name: "NASDAQ", value: "17,303.01", change: "-1.96%" },
-    { name: "RUSSELL 2000", value: "1,993.69", change: "-1.45%" },
-    { name: "DOW", value: "40,813.57", change: "-1.30%" },
-    { name: "NASDAQ", value: "17,303.01", change: "-1.96%" },
-    { name: "RUSSELL 2000", value: "1,993.69", change: "-1.45%" },
-    { name: "DOW", value: "40,813.57", change: "-1.30%" },
-    { name: "NASDAQ", value: "17,303.01", change: "-1.96%" },
-    { name: "RUSSELL 2000", value: "1,993.69", change: "-1.45%" },
-    { name: "RUSSELL 2000", value: "1,993.69", change: "-1.45%" },
-    { name: "DOW", value: "40,813.57", change: "-1.30%" },
-    { name: "NASDAQ", value: "17,303.01", change: "-1.96%" },
-    { name: "RUSSELL 2000", value: "1,993.69", change: "-1.45%" },
+  const [fetchedIndices, setFetchedIndices] = useState([]);
+  const [error, setError] = useState(null);
+
+  const symbols = [
+    "DOW",
+    "IXIC",
+    "RUT",
+    "DOW",
+    "IXIC",
+    "RUT",
+    "DOW",
+    "IXIC",
+    "RUT",
+    "RUT",
+    "DOW",
+    "IXIC",
+    "RUT",
   ];
+  React.useEffect(() => {
+    const fetchIndicesData = async () => {
+      try {
+        const indicesData = await Promise.all(
+          symbols.map(async (symbol) => {
+            // Fetch stock data for price using Axios
+            const stockResponse = await axios.get(
+              `http://localhost:5000/api/stock/${symbol}`
+            );
+
+            // Fetch price change using Axios
+            const priceChangeResponse = await axios.get(
+              `http://localhost:5000/api/price-change/${symbol}`
+            );
+
+            return {
+              name:
+                symbol === "IXIC"
+                  ? "NASDAQ"
+                  : symbol === "RUT"
+                  ? "RUSSELL 2000"
+                  : symbol,
+              value: stockResponse.data.price.toFixed(2), // Use price as the value
+              change:
+                priceChangeResponse.data.price_change >= 0
+                  ? `+${priceChangeResponse.data.price_change.toFixed(2)}%`
+                  : `${priceChangeResponse.data.price_change.toFixed(2)}%`,
+            };
+          })
+        );
+        setFetchedIndices(indicesData);
+        setError(null);
+      } catch (err) {
+        setError("Failed to fetch market data");
+        setFetchedIndices([]);
+      }
+    };
+
+    fetchIndicesData();
+  }, []);
 
   return (
     <div
-      className="w-full h-full lg:h-[80vh] lg:w-[26vw] lg:max-w-[300px] lg:ml-28 lg:mt-1 lg:pb-8 
+      className="w-full h-full lg:h-[80vh] lg:w-[32vw] lg:max-w-[340px] lg:min-w-[280px] lg:ml-28 lg:mt-1 lg:pb-8 
   lg:bg-gray-800 lg:flex lg:flex-col lg:items-center"
     >
       <h3 className="text-lg font-semibold my-2 lg:text-xl lg:mb-8 lg:border lg:border-t-transparent lg:border-x-transparent">
