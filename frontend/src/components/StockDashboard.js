@@ -18,19 +18,19 @@ const StockDashboard = ({ symbol }) => {
       try {
         // fetch stock data
         const stockRes = await axios.get(
-          `http://localhost:5000/api/stock/${symbol}`
+          `https://stock-tracker-lxmh.onrender.com/api/stock/${symbol}`
         );
         setStockData(stockRes.data);
 
         // fetch price change
         const priceChangeRes = await axios.get(
-          `http://localhost:5000/api/price-change/${symbol}`
+          `https://stock-tracker-lxmh.onrender.com/api/price-change/${symbol}`
         );
         setPriceChange(priceChangeRes.data);
 
         // fetch sma
         const smaRes = await axios.get(
-          `http://localhost:5000/api/sma/${symbol}`
+          `https://stock-tracker-lxmh.onrender.com/api/sma/${symbol}`
         );
         setSma(smaRes.data);
 

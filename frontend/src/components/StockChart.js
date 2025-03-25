@@ -30,7 +30,7 @@ const StockChart = ({ symbol }) => {
 
   useEffect(() => {
     axios
-      .get(`http://localhost:5000/api/history/${symbol}`)
+      .get(`https://stock-tracker-lxmh.onrender.com/api/history/${symbol}`)
       .then((res) => {
         const data = res.data.history;
         setHistory({
