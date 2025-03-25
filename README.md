@@ -18,6 +18,8 @@ Stock Tracker is a web-based application that allows users to track real-time st
 
 🛢 Reduced API calls using SQLite caching for better performance
 
+[![Stock Tracker](https://img.shields.io/badge/Live-Demo-brightgreen)](https://sage-bubblegum-1a98b0.netlify.app/)
+
 ## Mobile View
 
 ![Mobile View](./image/Mobile-view.png)
