@@ -18,4 +18,4 @@ Stock Tracker is a web-based application that allows users to track real-time st
 
 🛢 Reduced API calls using SQLite caching for better performance
 
-![Mobile View](./images/image/Mobile-view.png)
+![Mobile View](./image/Mobile-view.png)
