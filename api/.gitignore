@@ -2,3 +2,4 @@ apivenv/
 *.pyc
 __pycache__/
 stock_data.db" > .gitignore
+.env

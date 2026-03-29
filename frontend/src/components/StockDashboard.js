@@ -1,105 +1,202 @@
-// dashboard component
 import { useState, useEffect } from "react";
-import axios from "axios";
+import api from "../api";
 import IndicesSidebar from "./IndicesSidebar";
 import StockChart from "./StockChart";
+
+const pad = (n) => String(n).padStart(2, "0");
+const formatTime = (d) =>
+  `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+const formatDate = (d) =>
+  `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()}`;
+
+const StatBadge = ({ label, value, isPositive = null }) => {
+  const colorClass =
+    isPositive === null
+      ? "text-[var(--accent)]"
+      : isPositive
+        ? "text-[var(--positive)]"
+        : "text-[var(--negative)]";
+
+  const bg =
+    isPositive === null
+      ? "var(--accent-bg)"
+      : isPositive
+        ? "var(--positive-bg)"
+        : "var(--negative-bg)";
+
+  const border =
+    isPositive === null
+      ? "var(--accent-border)"
+      : isPositive
+        ? "var(--positive-border)"
+        : "var(--negative-border)";
+
+  return (
+    <div
+      className="rounded-xl px-4 py-3"
+      style={{ background: bg, border: `1px solid ${border}` }}
+    >
+      <p className="font-outfit text-[9px] font-bold tracking-widest uppercase text-[var(--text-muted)] mb-1">
+        {label}
+      </p>
+      <p
+        className={`font-mono text-[20px] font-bold tracking-tight leading-none ${colorClass}`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+};
+
+const Spinner = () => (
+  <div className="flex justify-center items-center h-full">
+    <div className="spinner" />
+  </div>
+);
 
 const StockDashboard = ({ symbol }) => {
   const [stockData, setStockData] = useState(null);
   const [priceChange, setPriceChange] = useState(null);
-  const [sma, setSma] = useState(null);
   const [err, setErr] = useState(null);
-  // date time
-  const now = new Date();
+  const [loading, setLoading] = useState(true);
+  const [currentTime, setCurrentTime] = useState(new Date());
 
-  // called every time the symbol value change
+  // Clock
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Data Fetching
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // fetch stock data
-        const stockRes = await axios.get(
-          `https://stock-tracker-lxmh.onrender.com/api/stock/${symbol}`
-        );
-        setStockData(stockRes.data);
+        setLoading(true);
+        // Hit the new smart backend endpoint
+        const res = await api.get(`/api/quote/${symbol}`);
+        const data = res.data;
 
-        // fetch price change
-        const priceChangeRes = await axios.get(
-          `https://stock-tracker-lxmh.onrender.com/api/price-change/${symbol}`
-        );
-        setPriceChange(priceChangeRes.data);
-
-        // fetch sma
-        const smaRes = await axios.get(
-          `https://stock-tracker-lxmh.onrender.com/api/sma/${symbol}`
-        );
-        setSma(smaRes.data);
-
+        setStockData({
+          symbol: data.symbol,
+          price: data.price,
+          source: data.source,
+        });
+        setPriceChange({ price_change: data.price_change });
         setErr(null);
-      } catch (err) {
-        setErr("Error fetching data");
+      } catch (error) {
+        setErr(
+          error.response?.data?.message ||
+            `Symbol ${symbol} not found or API limit reached.`,
+        );
         setStockData(null);
         setPriceChange(null);
-        setSma(null);
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
   }, [symbol]);
 
-  return (
-    <div className="flex sticky top-0 lg:flex-row flex-col px-4 sm:px-14 md:px-24 lg:px-0 lg:w-[100vw] lg:h-[80vh]">
-      {/* sidebar */}
-      <IndicesSidebar />
-      {/* main content */}
-      <div
-        className="flex w-full h-full lg:w-[100vw] lg:ml-2 p-6 lg:overflow-y-scroll
-    lg:overflow-y-auto lg:scrollbar-thin lg:scrollbar-thumb-gray-500 lg:scrollbar-track-transparent"
-      >
-        {err && <p className="text-red-500">{err}</p>}
-        {stockData ? (
-          <div className="w-full h-full">
-            <div className="w-full flex flex-col lg:flex-row justify-between">
-              <h2 className="text-2xl font-semibold mb-6">
-                {stockData.symbol}
+  const isPositive = priceChange?.price_change >= 0;
 
-                {/* date time  */}
-                <span className="relative bottom-2 ml-6 text-gray-500 text-xxs">
-                  AS OF &nbsp;
-                  {` ${now.getHours()}:${now.getMinutes()}:${now.getSeconds()} ${now.getDate()}-${
-                    now.getMonth() + 1
-                  }-${now.getFullYear()}`}
-                </span>
-              </h2>
-              <div className="flex flex-row">
-                <p className="text-4xl mr-4 mt-1">${stockData.price}</p>
-                {priceChange && (
-                  <p
-                    className={`${
-                      priceChange.price_change >= 0
-                        ? "text-green-500"
-                        : "text-red-500"
-                    } text-xs mt-1`}
+  return (
+    <div className="flex" style={{ height: "calc(100vh - 98px)" }}>
+      <IndicesSidebar />
+
+      <main className="flex-1 overflow-y-auto p-7">
+        {loading ? (
+          <Spinner />
+        ) : err ? (
+          <div
+            className="rounded-xl px-6 py-5 max-w-md mx-auto mt-12 text-center"
+            style={{
+              background: "var(--negative-bg)",
+              border: "1px solid var(--negative-border)",
+            }}
+          >
+            <p className="font-outfit text-[13px] text-[var(--negative)]">
+              {err}
+            </p>
+          </div>
+        ) : stockData ? (
+          <div className="fade-in">
+            {/* Top row */}
+            <div className="flex flex-wrap justify-between items-start gap-5 mb-6">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <h2 className="font-mono text-[30px] font-bold tracking-tight text-[var(--text-primary)] leading-none">
+                    {stockData.symbol}
+                  </h2>
+                  <span
+                    className="font-outfit text-[9px] font-bold tracking-widest uppercase px-2 py-1 rounded-md text-[var(--text-muted)]"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border)",
+                    }}
                   >
-                    <span className="text-gray-500">AT CLOSE - </span>
-                    {priceChange.price_change.toFixed(2)}%
+                    EQUITY
+                  </span>
+                  <span
+                    className="flex items-center gap-1 px-2 py-1 rounded-md"
+                    style={{
+                      background: "var(--bg-elevated)",
+                      border: "1px solid var(--border)",
+                    }}
+                  >
+                    <div className="live-dot" />
+                    <span className="font-outfit text-[9px] font-bold tracking-widest uppercase text-[var(--positive)]">
+                      LIVE
+                    </span>
+                  </span>
+                </div>
+                <p className="font-mono text-[11px] text-[var(--text-muted)] tracking-wider">
+                  {formatDate(currentTime)} · {formatTime(currentTime)} UTC
+                </p>
+              </div>
+
+              <div className="flex items-end gap-3 flex-wrap">
+                <div>
+                  <p className="font-outfit text-[9px] font-bold tracking-widest uppercase text-[var(--text-muted)] mb-1">
+                    LAST PRICE
                   </p>
-                )}
-                {sma && (
-                  <p className="text-lg font-semibold mt-4 ml-4 lg:ml-0 lg:mt-8">
-                    SMA: {sma.sma.toFixed(2)}
+                  <p className="font-mono text-[42px] font-bold tracking-tight text-[var(--text-primary)] leading-none">
+                    ${stockData.price.toFixed(2)}
                   </p>
+                </div>
+
+                {priceChange && (
+                  <StatBadge
+                    label="Change"
+                    value={`${isPositive ? "+" : "−"}${Math.abs(priceChange.price_change).toFixed(2)}%`}
+                    isPositive={isPositive}
+                  />
                 )}
               </div>
             </div>
-            <div className="flex flex-row flex-wrap">
-              <StockChart symbol={symbol} />
-              <StockChart symbol={symbol} />
-              <StockChart symbol={symbol} />
+
+            <div className="mb-5">
+              <span
+                className="font-outfit text-[10px] font-medium tracking-widest uppercase px-3 py-1 rounded-md text-[var(--text-muted)]"
+                style={{
+                  background: "var(--bg-elevated)",
+                  border: "1px solid var(--border)",
+                }}
+              >
+                Source: {stockData.source}
+              </span>
             </div>
+
+            {/* Chart */}
+            <StockChart symbol={symbol} />
           </div>
         ) : (
-          <p>Loading ...</p>
+          <div className="flex justify-center items-center h-full">
+            <p className="font-outfit text-[14px] text-[var(--text-muted)]">
+              No data available
+            </p>
+          </div>
         )}
-      </div>
+      </main>
     </div>
   );
 };

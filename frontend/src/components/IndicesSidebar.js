@@ -1,91 +1,108 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
+import React, { useState } from "react";
+import { useIndicesData } from "../hooks/useIndicesData";
 
-function IndicesSidebar() {
-  const [fetchedIndices, setFetchedIndices] = useState([]);
-  const [error, setError] = useState(null);
+const SkeletonCard = () => (
+  <div
+    className="rounded-xl p-4"
+    style={{
+      background: "var(--bg-elevated)",
+      border: "1px solid var(--border)",
+    }}
+  >
+    <div className="flex justify-between items-center mb-3">
+      <div className="skeleton h-[9px] w-[70px]" />
+      <div className="skeleton h-[18px] w-[50px] rounded-md" />
+    </div>
+    <div className="skeleton h-[22px] w-[90px]" />
+  </div>
+);
 
-  const symbols = [...new Set(["DOW", "IXIC", "RUT"])]; // Remove duplicates
-
-  useEffect(() => {
-    const fetchIndicesData = async () => {
-      try {
-        const indicesData = await Promise.all(
-          symbols.map(async (symbol) => {
-            const stockResponse = await axios.get(
-              `http://localhost:5000/api/stock/${symbol}`
-            );
-            const priceChangeResponse = await axios.get(
-              `http://localhost:5000/api/price-change/${symbol}`
-            );
-
-            return {
-              name:
-                symbol === "IXIC"
-                  ? "NASDAQ"
-                  : symbol === "RUT"
-                  ? "RUSSELL 2000"
-                  : symbol,
-              value: stockResponse.data.price.toFixed(2),
-              change:
-                priceChangeResponse.data.price_change >= 0
-                  ? `+${priceChangeResponse.data.price_change.toFixed(2)}%`
-                  : `${priceChangeResponse.data.price_change.toFixed(2)}%`,
-            };
-          })
-        );
-        setFetchedIndices(indicesData);
-        setError(null);
-      } catch (err) {
-        setError("Failed to fetch market data");
-        setFetchedIndices([]);
-      }
-    };
-
-    fetchIndicesData();
-  }, []);
+const IndexCard = ({ index }) => {
+  const [hovered, setHovered] = useState(false);
 
   return (
     <div
-      className="w-full h-full lg:h-[80vh] lg:w-[32vw] lg:max-w-[340px] lg:min-w-[280px] lg:ml-28 lg:mt-1 lg:pb-8 
-    lg:bg-gray-800 lg:flex lg:flex-col lg:items-center"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      className="rounded-xl p-4 cursor-pointer transition-all duration-150"
+      style={{
+        background: hovered ? "var(--bg-hover)" : "var(--bg-elevated)",
+        border: `1px solid ${hovered ? "var(--border-light)" : "var(--border)"}`,
+      }}
     >
-      <h3 className="text-lg font-semibold my-2 lg:text-xl lg:mb-8 lg:border lg:border-t-transparent lg:border-x-transparent">
-        Global Market
-      </h3>
-
-      {/* Wrapper to enable both scrolling directions */}
-      <div className="w-full h-full overflow-auto scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-transparent">
-        <div
-          className="flex flex-row lg:flex-col lg:justify-between lg:items-center w-full pb-2 
-          overflow-auto scrollbar-thin scrollbar-thumb-gray-500 scrollbar-track-transparent"
+      {/* Top row */}
+      <div className="flex justify-between items-center mb-2">
+        <span className="font-outfit text-[10px] font-semibold tracking-widest uppercase text-[var(--text-muted)]">
+          {index.name}
+        </span>
+        <span
+          className="font-mono text-[10px] px-2 py-[2px] rounded-md"
+          style={{
+            background: index.isPositive
+              ? "var(--positive-bg)"
+              : "var(--negative-bg)",
+            border: `1px solid ${index.isPositive ? "var(--positive-border)" : "var(--negative-border)"}`,
+            color: index.isPositive ? "var(--positive)" : "var(--negative)",
+          }}
         >
-          {fetchedIndices.map((index, i) => (
-            <div
-              key={i}
-              className="flex flex-row justify-around items-center lg:w-full h-10 lg:h-16 
-              pl-2 mr-5 bg-gray-700 lg:mx-0 lg:bg-transparent hover:bg-gray-600 cursor-pointer 
-              lg:border lg:border-y-gray-500 lg:border-x-transparent min-w-max"
-            >
-              <p className="text-xs lg:text-base w-16 lg:pr-24">
-                {index.name.length > 5
-                  ? index.name.slice(0, 5) + "..."
-                  : index.name}
-              </p>
-              <p
-                className={`${
-                  index.change.startsWith("-")
-                    ? "text-red-500"
-                    : "text-green-500"
-                } text-xs w-14`}
-              >
-                {index.value} {index.change}
-              </p>
-            </div>
-          ))}
-        </div>
+          {index.isPositive ? "+" : "−"}
+          {index.change}%
+        </span>
       </div>
+
+      {/* Price */}
+      <p className="font-mono text-[20px] font-bold tracking-tight text-[var(--text-primary)]">
+        ${index.price}
+      </p>
     </div>
+  );
+};
+
+function IndicesSidebar() {
+  const { indices, loading, error } = useIndicesData();
+
+  return (
+    <aside
+      className="hidden lg:flex flex-col h-full"
+      style={{
+        width: "230px",
+        minWidth: "230px",
+        background: "var(--bg-surface)",
+        borderRight: "1px solid var(--border)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="flex items-center px-4 py-3 flex-shrink-0"
+        style={{ borderBottom: "1px solid var(--border)" }}
+      >
+        <span className="font-outfit text-[11px] font-bold tracking-widest uppercase text-[var(--text-muted)]">
+          Global Market
+        </span>
+      </div>
+
+      {/* Cards */}
+      <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2">
+        {loading ? (
+          [1, 2, 3].map((i) => <SkeletonCard key={i} />)
+        ) : error ? (
+          <p className="text-[var(--negative)] text-[12px] p-2">{error}</p>
+        ) : (
+          indices.map((index) => <IndexCard key={index.symbol} index={index} />)
+        )}
+      </div>
+
+      {/* Footer */}
+      <div
+        className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
+        style={{ borderTop: "1px solid var(--border)" }}
+      >
+        <div className="live-dot" />
+        <span className="font-outfit text-[10px] font-bold tracking-widest uppercase text-[var(--text-muted)]">
+          Live Data
+        </span>
+      </div>
+    </aside>
   );
 }
 

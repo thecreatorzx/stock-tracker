@@ -1,8 +1,114 @@
-input {
-  padding: 8px;
-  margin: 10px;
-  font-size: 16px;
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700&family=Outfit:wght@300;400;500;600;700&display=swap');
+
+/* ─── Design Tokens ─────────────────────────── */
+:root {
+  --bg-primary:      #080b0f;
+  --bg-surface:      #0e1117;
+  --bg-elevated:     #141820;
+  --bg-hover:        #1a2130;
+  --border:          #1e2535;
+  --border-light:    #253045;
+  --text-primary:    #e4e8f0;
+  --text-secondary:  #8892a4;
+  --text-muted:      #4a5568;
+  --positive:        #00c896;
+  --positive-bg:     rgba(0, 200, 150, 0.08);
+  --positive-border: rgba(0, 200, 150, 0.2);
+  --negative:        #ff5252;
+  --negative-bg:     rgba(255, 82, 82, 0.08);
+  --negative-border: rgba(255, 82, 82, 0.2);
+  --accent:          #4d9fff;
+  --accent-bg:       rgba(77, 159, 255, 0.08);
+  --accent-border:   rgba(77, 159, 255, 0.2);
 }
-.text-xxs {
-  font-size: .6rem;
+
+/* ─── Base ──────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
 }
+
+body {
+  font-family: 'Outfit', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar ─────────────────────────────── */
+::-webkit-scrollbar        { width: 4px; height: 4px; }
+::-webkit-scrollbar-track  { background: transparent; }
+::-webkit-scrollbar-thumb  { background: var(--border-light); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* ─── Spinner ───────────────────────────────── */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin 0.75s linear infinite;
+}
+
+/* ─── Fade in ───────────────────────────────── */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in {
+  animation: fadeInUp 0.3s ease forwards;
+}
+
+/* ─── Ticker scroll ─────────────────────────── */
+@keyframes ticker-scroll {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker-scroll 60s linear infinite;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
+/* ─── Live dot pulse ────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--positive);
+  flex-shrink: 0;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+/* ─── Skeleton shimmer ──────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position:  400px 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-elevated) 25%,
+    var(--bg-hover) 50%,
+    var(--bg-elevated) 75%
+  );
+  background-size: 800px 100%;
+  animation: shimmer 1.4s ease infinite;
+  border-radius: 4px;
+}
+
+/* ─── Font utilities ─────────────────────────── */
+.font-mono  { font-family: 'Space Mono', monospace !important; }
+.font-outfit { font-family: 'Outfit', sans-serif !important; }

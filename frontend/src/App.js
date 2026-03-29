@@ -1,36 +1,95 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import StockDashboard from "./components/StockDashboard";
-import "./App.css";
 import TopStrip from "./components/TopStrip";
+import "./App.css";
 
 const App = () => {
   const [symbol, setSymbol] = useState("AAPL");
+  const [inputValue, setInputValue] = useState("AAPL");
+  const [focused, setFocused] = useState(false);
+
+  // Trigger search ONLY when Enter is pressed
+  const handleSearch = (e) => {
+    if (e.key === "Enter") {
+      const val = inputValue.trim().toUpperCase();
+      if (val && /^[A-Z]+$/.test(val)) {
+        setSymbol(val);
+      }
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white overflow-hidden">
-      {/* Header */}
-      <header className="bg-gray-800 lg:bg-gray-900 p-4 flex justify-between items-center">
-        <h1 className="pl-5 text-base sm:text-2xl md:text-3xl lg:text-4xl font-serif font-bold">
-          Stock Price Tracker
-        </h1>
+    <div
+      className="min-h-screen overflow-hidden text-[var(--text-primary)]"
+      style={{
+        background: "var(--bg-primary)",
+        fontFamily: "Outfit, sans-serif",
+      }}
+    >
+      {/* ── Header ── */}
+      <header
+        className="flex items-center justify-between px-6 flex-shrink-0"
+        style={{
+          background: "var(--bg-surface)",
+          borderBottom: "1px solid var(--border)",
+          height: "60px",
+        }}
+      >
+        {/* Logo */}
+        <div className="flex items-center gap-3">
+          <div
+            className="flex items-center justify-center w-8 h-8 rounded-lg flex-shrink-0"
+            style={{ background: "var(--accent)" }}
+          >
+            <span className="font-mono text-[13px] font-bold text-[var(--bg-primary)]">
+              ST
+            </span>
+          </div>
+          <div>
+            <h1 className="font-outfit text-[16px] font-bold text-[var(--text-primary)] leading-none tracking-tight">
+              StockTrack
+            </h1>
+            <p className="font-mono text-[9px] text-[var(--text-muted)] tracking-widest uppercase mt-1 leading-none">
+              Market Tracker
+            </p>
+          </div>
+        </div>
 
-        {/* Search Box with Icon */}
-        <div className="relative box-border">
-          <span className="absolute left-5 top-5 text-gray-400">🔍</span>
+        {/* Search */}
+        <div className="relative">
+          <span
+            className="absolute left-3 top-1/2 -translate-y-1/2 text-[16px] pointer-events-none transition-colors duration-150"
+            style={{ color: focused ? "var(--accent)" : "var(--text-muted)" }}
+          >
+            ⌕
+          </span>
           <input
             type="text"
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-            placeholder="Search stocks..."
-            className="p-2 pl-10 rounded-3xl bg-gray-600 text-white border focus:border-gray-400 border-gray-600 focus:outline-none"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value.toUpperCase())}
+            onKeyDown={handleSearch}
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
+            placeholder="Search & hit Enter..."
+            maxLength={10}
+            spellCheck={false}
+            autoComplete="off"
+            className="font-mono text-[13px] tracking-wider rounded-lg pl-9 pr-4 py-2 outline-none transition-all duration-150"
+            style={{
+              background: "var(--bg-elevated)",
+              border: `1px solid ${focused ? "var(--accent)" : "var(--border)"}`,
+              color: "var(--text-primary)",
+              width: "230px",
+              boxShadow: focused ? "0 0 0 3px rgba(77,159,255,0.12)" : "none",
+            }}
           />
         </div>
       </header>
 
-      {/* Top Strip */}
+      {/* ── Ticker ── */}
       <TopStrip />
 
-      {/* Main Content */}
+      {/* ── Dashboard ── */}
       <StockDashboard symbol={symbol} />
     </div>
   );

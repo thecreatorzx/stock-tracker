@@ -1,232 +1,238 @@
 import requests
 import os
+from dotenv import load_dotenv
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime,timedelta, timezone
-from flask import Flask, jsonify, make_response
+from datetime import datetime, timezone
+from flask import Flask, request, jsonify
 from flask_cors import CORS
-from flask_restful import Api, Resource, abort,fields, marshal_with
+from flask_restful import Api, Resource, abort
+import logging
+from apscheduler.schedulers.background import BackgroundScheduler
 
-app = Flask(__name__) 
+load_dotenv()
+
+app = Flask(__name__)
 CORS(app)
 
-# configure sqlalchemy
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///stock_data.db')
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False 
-db = SQLAlchemy(app)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Initialize flask-restful api
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///stock_data.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
 api = Api(app)
 
-# Alpha Vantage API 
-API_KEY = os.environ.get("ALPHA_VANTAGE_API_KEY", "JKWNBWCZRFTZ7FY3")
-EXPIRY_TIME = 30
+# ─────────────────────────────
+# API KEYS & CONFIG
+# ─────────────────────────────
+KEY_1 = os.environ.get("TWELVE_DATA_API_KEY_1")
+KEY_2 = os.environ.get("TWELVE_DATA_API_KEY_2")
+BASE_URL = "https://api.twelvedata.com"
 
-# Track last fetch times per symbol (in-memory)
-last_fetch_times = {}
+# All 14 symbols
+ALL_SYMBOLS = ["DIA", "QQQ", "IWM", "SPY", "AAPL", "MSFT", "NVDA", "TSLA", "AMZN", "META", "GOOGL", "AMD", "NFLX", "JPM"]
 
-# Model for stock data
+# Fast RAM cache for the live dashboard
+market_cache = {}
+
+# ─────────────────────────────
+# DATABASE MODELS
+# ─────────────────────────────
 class StockData(db.Model):
-    __tablename__ = 'prices'
-    id = db.Column(db.Integer, primary_key = True)
-    symbol = db.Column(db.String(10), nullable = False)
-    time = db.Column(db.DateTime, nullable = False)
-    price = db.Column(db.Float, nullable= False)
-    volume = db.Column(db.Integer, nullable = False)
-    __table_args__ = (db.UniqueConstraint('symbol', 'time', name='unique_symbol_time'),)
-    
-    def __repr__(self):
-        return f"StockData(symbol = {self.symbol}, time = {self.time}, price ={self.price}, volume = {self.volume})"
-    
+    id = db.Column(db.Integer, primary_key=True)
+    symbol = db.Column(db.String(10), index=True)
+    time = db.Column(db.DateTime, index=True)
+    price = db.Column(db.Float)
 
-# initialize db
 with app.app_context():
     db.create_all()
 
-# function for fetching and cache stock data
-def fetch_and_cache_data(symbol):
+# ─────────────────────────────
+# CORE FETCH HELPERS
+# ─────────────────────────────
+def fetch_quote_chunk(symbols_list, api_key, key_name):
+    """Fetches LIVE prices for the fast RAM dashboard."""
+    if not api_key: return {}
+    symbol_str = ",".join(symbols_list)
+    url = f"{BASE_URL}/quote?symbol={symbol_str}&apikey={api_key}"
     try:
-        latest_entry = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
-        now_utc = datetime.now(timezone.utc)
-        last_fetch = last_fetch_times.get(symbol)
-        if last_fetch:
-            time_diff = now_utc - last_fetch
-        if last_fetch and time_diff < timedelta(minutes=EXPIRY_TIME):
-            if latest_entry:
-                return latest_entry.time.strftime("%Y-%m-%d %H:%M:%S"), latest_entry.price, latest_entry.volume
-            return None
+        res = requests.get(url, timeout=10)
+        data = res.json()
+        if "status" not in data or data.get("status") != "error":
+            return data
+    except Exception as e:
+        logger.error(f"Live fetch error with {key_name}: {e}")
+    return {}
+
+def fetch_and_store_history(symbols_list, api_key, key_name):
+    """Fetches HISTORICAL data and saves it securely to the database."""
+    if not api_key: return
+    symbol_str = ",".join(symbols_list)
+    # Get 5-minute intervals, last 15 data points (covers the last hour+ of trading)
+    url = f"{BASE_URL}/time_series?symbol={symbol_str}&interval=5min&outputsize=15&apikey={api_key}"
+    
+    try:
+        res = requests.get(url, timeout=10)
+        data = res.json()
         
-        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&outputsize=compact&apikey={API_KEY}"
-        response = requests.get(url)
-        data = response.json()
-        if "Time Series (5min)" not in data:
-            print(f"API response missing time series: {data}")
-            return None
-        times = list(data["Time Series (5min)"].keys())[:10]
-        prices = [float(data["Time Series (5min)"][t]["4. close"]) for t in times]
-        volumes = [int(data["Time Series (5min)"][t]["5. volume"]) for t in times]
+        if "status" in data and data["status"] == "error":
+            logger.error(f"History API error on {key_name}: {data}")
+            return
+
+        with app.app_context():
+            for sym in symbols_list:
+                if sym in data and "values" in data[sym]:
+                    for v in data[sym]["values"]:
+                        t = datetime.strptime(v['datetime'], "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+                        price = float(v['close'])
+
+                        exists = StockData.query.filter_by(symbol=sym, time=t).first()
+                        if not exists:
+                            db.session.add(StockData(symbol=sym, time=t, price=price))
+            db.session.commit()
+            logger.info(f"Historical data saved to database using {key_name}.")
+            
+    except Exception as e:
+        logger.error(f"History fetch failed on {key_name}: {e}")
+
+# ─────────────────────────────
+# BACKGROUND TASKS
+# ─────────────────────────────
+def update_market_cache():
+    """Updates the Live RAM Cache every 15 minutes."""
+    global market_cache
+    now_utc = datetime.now(timezone.utc)
+    is_daytime = 13 <= now_utc.hour <= 21
+    
+    if not market_cache or is_daytime:
+        chunk1, chunk2 = ALL_SYMBOLS[:7], ALL_SYMBOLS[7:]
+        data1 = fetch_quote_chunk(chunk1, KEY_1, "API Key 1")
+        data2 = fetch_quote_chunk(chunk2, KEY_2, "API Key 2")
         
-        new_entries = 0
-        for t, p, v in zip(times, prices, volumes):
-            time_obj = datetime.strptime(t, "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-            existing = StockData.query.filter_by(symbol=symbol, time=time_obj).first()
-            if not existing:
-                stock = StockData(symbol=symbol, time=time_obj, price=p, volume=v)
-                db.session.add(stock)
-                new_entries += 1
-        db.session.commit()
-        # Record the fetch time
-        last_fetch_times[symbol] = now_utc
-        latest_entry = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
-        if latest_entry:
-            return latest_entry.time.strftime("%Y-%m-%d %H:%M:%S"), latest_entry.price, latest_entry.volume
-        return None
-    except (requests.RequestException, Exception) as e:
-        db.session.rollback()
-        return None
-    finally:
-        db.session.close()
+        for chunk, data in [(chunk1, data1), (chunk2, data2)]:
+            for sym in chunk:
+                if sym in data:
+                    item = data[sym]
+                    market_cache[sym] = {
+                        "price": float(item.get("close") or item.get("previous_close") or 0),
+                        "price_change": float(item.get("percent_change", 0))
+                    }
 
-# Function to calculate SMA locally
-def calculate_sma(symbol, period=5):
-    rows = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).limit(period).all()
-    if len(rows) < period:
-        fetch_and_cache_data(symbol)
-        rows = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).limit(period).all()
-    if not rows:
-        return None
-    prices = [row.price for row in rows[::-1]]
-    return sum(prices) / len(prices)
+def update_historical_database():
+    """Runs hourly to build the chart database."""
+    now_utc = datetime.now(timezone.utc)
+    is_daytime = 13 <= now_utc.hour <= 21
+    
+    if is_daytime:
+        logger.info("Starting hourly historical database fetch...")
+        chunk1, chunk2 = ALL_SYMBOLS[:7], ALL_SYMBOLS[7:]
+        fetch_and_store_history(chunk1, KEY_1, "API Key 1")
+        fetch_and_store_history(chunk2, KEY_2, "API Key 2")
 
-# Defining fields for json responses
-stock_fields = {
-    'id':fields.Integer,
-    'symbol': fields.String,
-    'time': fields.String,
-    'price': fields.Float,
-    'volume': fields.Integer,
-    'source': fields.String
-}
-history_fields = {
-    'symbol': fields.String,
-    'history': fields.List(fields.Nested({
-        'time': fields.String,
-        'price': fields.Float
-    }))
-}
-sma_fields = {
-    'symbol': fields.String,
-    'sma': fields.Float,
-}
-price_change_fields = {
-    'symbol': fields.String,
-    'price_change': fields.Float
-}
+# ─────────────────────────────
+# SCHEDULER SETUP
+# ─────────────────────────────
+scheduler = BackgroundScheduler()
+scheduler.add_job(func=update_market_cache, trigger="interval", minutes=15)
+scheduler.start()
 
-# create stock price and volume resource
-class stockResource(Resource):
-    @marshal_with(stock_fields)
+# Needs a slightly delayed start for DB initialization context if deploying
+scheduler.add_job(func=update_historical_database, trigger="interval", hours=1)
+
+update_market_cache()
+
+# ─────────────────────────────
+# API RESOURCES
+# ─────────────────────────────
+class MarketBatchResource(Resource):
+    def get(self):
+        """Returns the live 15-minute RAM cache for the sidebars."""
+        return market_cache, 200
+
+class QuoteResource(Resource):
     def get(self, symbol):
-        # check cache
-        latest = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
-        now_utc = datetime.now(timezone.utc)
-        last_fetch = last_fetch_times.get(symbol)
-        if last_fetch:
-            time_diff = now_utc - last_fetch
-        if last_fetch and time_diff < timedelta(minutes=EXPIRY_TIME):
-            if latest:
-                return {
-                    "id": latest.id,
-                    "symbol": latest.symbol,
-                    "time": latest.time.strftime("%Y-%m-%d %H:%M:%S"),
-                    "price": latest.price,
-                    "volume": latest.volume,
-                    "source": "cache"
-                }, 200
-            abort(400, message="No data available in cache")
-        print(f"Data stale or missing for {symbol}, fetching...")
-        result = fetch_and_cache_data(symbol)
-        if result:
-            timestamp, price, volume = result
-            latest = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
+        """Smart Endpoint: Checks cache first, then falls back to Live API."""
+        symbol = symbol.strip().upper()
+        
+        # 1. Is it in our fast RAM cache?
+        if symbol in market_cache:
             return {
-                "id": latest.id,
-                "symbol": latest.symbol,
-                "time": latest.time.strftime("%Y-%m-%d %H:%M:%S"),
-                "price": latest.price,
-                "volume": latest.volume,
-                "source": "api"
+                "symbol": symbol,
+                "price": market_cache[symbol]["price"],
+                "price_change": market_cache[symbol]["price_change"],
+                "source": "Memory Cache"
             }, 200
-        if latest:
-            print(f"API fetch failed, using latest available data for {symbol}")
+            
+        # 2. Not in cache? Fetch it live! (Costs 1 API credit)
+        api_key = KEY_1 or KEY_2
+        url = f"{BASE_URL}/quote?symbol={symbol}&apikey={api_key}"
+        try:
+            res = requests.get(url, timeout=5)
+            data = res.json()
+            
+            if "status" in data and data["status"] == "error":
+                abort(404, message=data.get("message", "Symbol not found or API limit reached."))
+                
+            price = float(data.get("close") or data.get("previous_close") or 0)
+            price_change = float(data.get("percent_change", 0))
+            
             return {
-                "id": latest.id,
-                "symbol": latest.symbol,
-                "time": latest.time.strftime("%Y-%m-%d %H:%M:%S"),
-                "price": latest.price,
-                "volume": latest.volume,
-                "source": "cache (fallback)"
+                "symbol": symbol,
+                "price": price,
+                "price_change": price_change,
+                "source": "Live API"
             }, 200
-        abort(400, message="Invalid symbol or API limit reached")
+        except Exception as e:
+            logger.error(f"Live fetch failed for {symbol}: {e}")
+            abort(500, message="Failed to fetch live data")
 
-# create price change resource
-class priceChangeResource(Resource):
-    @marshal_with(price_change_fields)
+class ChartDataResource(Resource):
     def get(self, symbol):
-        # check cache
-        latest = StockData.query.filter_by(symbol= symbol).order_by(StockData.time.desc()).first()
-        if not latest:
-            fetch_and_cache_data(symbol)
-            latest = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
-        if not latest:
-            abort(404, message = "No data available")
-        earliest = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.asc()).first()
-        if earliest and latest:
-            if earliest.price == 0:
-                return {"symbol": symbol, "price_change": latest.price}, 200
-            price_change = ((latest.price - earliest.price)/earliest.price)*100
-            return {"symbol": symbol, "price_change": price_change}, 200
-        abort(404, message = "Insufficient data for price change")
-
-# create sma resource
-class smaResource(Resource):
-    @marshal_with(sma_fields)
-    def get(self, symbol):
-        latest = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).first()
-        now_utc = datetime.now(timezone.utc)
-        print(f"Checking SMA for {symbol}: now={now_utc}, latest={latest.time if latest else 'None'}")
-        if latest:
-            time_diff = now_utc - latest.time.replace(tzinfo=timezone.utc)
-            print(f"Time difference for {symbol}: {time_diff}")
-            if time_diff >= timedelta(minutes=EXPIRY_TIME):
-                rows = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).limit(5).all()
-                if len(rows) < 5:
-                    print(f"Data stale and insufficient ({len(rows)} rows), fetching for {symbol}")
-                    fetch_and_cache_data(symbol)
-        else:
-            print(f"No data for {symbol}, fetching...")
-            fetch_and_cache_data(symbol)
+        """Smart Chart: Checks DB first, falls back to Live API."""
+        symbol = symbol.strip().upper()
         
-        sma_value = calculate_sma(symbol)
-        if sma_value is not None:
-            return {"symbol": symbol, "sma": sma_value}, 200        
-        abort(400, "Insufficient data to calculate SMA")
-        
-# create history resource
-class historyResource(Resource):
-    @marshal_with(history_fields)
-    def get(self,symbol):
-        rows = StockData.query.filter_by(symbol = symbol).order_by(StockData.time.desc()).limit(10).all()
-        if rows:
-            history = [{"time": row.time.strftime("%Y-%m-%d %H:%M:%S"), "price": row.price} for row in rows[::-1]]# reverse chronological order
-            return {"symbol": symbol, "history":history},200
-        abort(404,message= "No Historical data available")
+        # 1. Check Database for our 14 tracked symbols
+        data = StockData.query.filter_by(symbol=symbol).order_by(StockData.time.desc()).limit(30).all()
+        if data:
+            data.reverse()
+            results = [{"time": d.time.strftime("%H:%M"), "price": d.price} for d in data]
+            return results, 200
+            
+        # 2. If no data in DB (a randomly searched symbol), fetch live chart! (Costs 1 credit)
+        api_key = KEY_1 or KEY_2
+        url = f"{BASE_URL}/time_series?symbol={symbol}&interval=5min&outputsize=30&apikey={api_key}"
+        try:
+            res = requests.get(url, timeout=5)
+            json_data = res.json()
+            
+            if "status" in json_data and json_data["status"] == "error":
+                abort(404, message="No chart data available for this symbol.")
+                
+            results = []
+            values = json_data.get("values", [])
+            values.reverse() # Reverse to chronological order
+            for v in values:
+                t_obj = datetime.strptime(v['datetime'], "%Y-%m-%d %H:%M:%S")
+                results.append({
+                    "time": t_obj.strftime("%H:%M"),
+                    "price": float(v['close'])
+                })
+            return results, 200
+        except Exception as e:
+            abort(500, message="Failed to fetch live chart data")
 
-# adding resources to api
-api.add_resource(stockResource,'/api/stock/<symbol>')
-api.add_resource(priceChangeResource,'/api/price-change/<symbol>')
-api.add_resource(smaResource,'/api/sma/<symbol>')
-api.add_resource(historyResource,'/api/history/<symbol>')
+# Keep legacy routes alive just in case
+class LegacyResource(Resource):
+    def get(self): return market_cache, 200
 
-# server
+# ─────────────────────────────
+# ROUTES
+# ─────────────────────────────
+api.add_resource(MarketBatchResource, '/api/market/batch')
+api.add_resource(QuoteResource, '/api/quote/<string:symbol>')
+api.add_resource(ChartDataResource, '/api/chart/<string:symbol>')
+api.add_resource(LegacyResource, '/api/stock/batch', '/api/price-change/batch')
+
 if __name__ == '__main__':
-    app.run(debug=True, host = "0.0.0.0", port=5000)
+    app.run(debug=True, use_reloader=False)
