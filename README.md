@@ -2,7 +2,10 @@
 
 A high-performance stock tracking web app engineered to bypass API rate limits using a custom dual-key background caching architecture.
 
-[![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen)](https://stockpricetrackerapp.netlify.app/)
+## [![Live Demo](https://img.shields.io/badge/Live-Demo-brightgreen)](https://stockpricetrackerapp.netlify.app/)
+
+---
+
 ![Website Preview](./image/view.png)
 
 ---
