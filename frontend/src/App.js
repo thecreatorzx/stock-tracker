@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import StockDashboard from "./components/StockDashboard";
 import TopStrip from "./components/TopStrip";
 import "./App.css";
