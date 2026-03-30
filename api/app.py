@@ -12,7 +12,10 @@ from apscheduler.schedulers.background import BackgroundScheduler
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "https://stockpricetrackerapp.netlify.app/"}})
+CORS(app, resources={r"/api/*": {"origins": [
+    "https://stockpricetrackerapp.netlify.app",
+    "https://stockpricetrackerapp.netlify.app/"
+]}})
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
